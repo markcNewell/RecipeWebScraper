@@ -11,9 +11,9 @@ import requests
 
 
 class Website:
-	def __init__(self, homepage, input_dict):
+	def __init__(self, homepage, input_dict, last_mod):
 		self.homepage = self.cleanUrl(homepage)
-		self.urls = self.getAllUrls()
+		self.urls = self.getNewUrls(last_mod)
 		self.input_dict = input_dict
 
 		print(len(self.urls))
@@ -22,17 +22,33 @@ class Website:
 
 
 
+	#Small utility methods
+	def cleanUrl(self, url):
+		return re.sub('\/$', '', url)
 
-	###########################################COMMENT###############################################
-	def getAllUrls(self):
 
+	def clearText(self, text):
+		return " ".join(text.split())
+
+
+	def splitList(self, text):
+		return re.split('\d. ', text)
+
+
+
+
+
+
+
+	def getNewUrls(self, last_mod):
+		"""
+		A method to get all the urls since the last modification time of the website data held.
+		Parameters:
+			- last_mod: a string in the form "2018-12-30" (year-month-date)
+		Returns:
+			- The list of urls that have been modified since the last check
+		"""
 		url = self.homepage + "/sitemap.xml"
-
-		#Visual web browser
-		#driver = webdriver.Firefox()
-		#driver.get(url)
-		#html = driver.page_source
-
 
 		#Get web page using requests
 		page = requests.get(url)
@@ -40,30 +56,42 @@ class Website:
 
 
 		soup = BeautifulSoup(html, 'xml')
-		#driver.quit()
-
-		urls = soup.find_all("loc", text=re.compile("recipes/"))
-
-		return [u.text for u in urls]
 
 
-	def cleanUrl(self, url):
-		return re.sub('\/$', '', url)
+		#Find all the dates which are after the last modification date
+		times = soup.find_all("lastmod", text=lambda t: self.compareDates(t, last_mod))
 
 
-	def getNewUrls(self):
-		newDate = datetime.now() - timedelta(days=365)
+		#For each time
+		urls = []
+		for u in times:
+			#Find the url associated
+			url = u.parent.findChildren("loc")[0].text
 
-		driver = webdriver.Firefox()
-		driver.get(self.homepage + "/sitemap.xml")
-		soup = BeautifulSoup(driver.page_source, 'xml')
-		driver.quit()
 
-		urls = soup.find_all("lastmod", text=lambda t: self.compareDates(t, newDate.strftime("%Y-%m-%d")))	
-		return [u.parent.findChildren("loc")[0].text for u in urls]
+			#If the url is a recipe then add it
+			if (re.search("recipes/",url)):
+				urls.append(url)
+
+
+
+		return urls
+
+
+
+
+
 
 
 	def compareDates(self, first, second):
+		"""
+		A method to compare two dates as strings in the form year-month-date.
+		Parameters:
+			- first: The first date to compare.
+			- second: The second date to compare.
+		Returns:
+			- boolean if first is after second date
+		"""
 		first = first.split("-")
 		second = second.split("-")
 
@@ -77,14 +105,6 @@ class Website:
 			return False;
 
 
-	def clearText(self, text):
-		return " ".join(text.split())
-
-
-	def splitList(self, text):
-		return re.split('\d. ', text)
-
-	##################################################################################
 
 
 
@@ -92,7 +112,8 @@ class Website:
 
 
 
-	def getRecipes(self, overwrite=True):
+
+	def getRecipes(self):
 		"""
 		A method to get all the recipies of all the urls collected
 		"""
@@ -112,35 +133,35 @@ class Website:
 				#exception_counter+=1
 
 
-
 		print("Exception Counter:", exception_counter)
-
-		if (len(self.recipes) > 0):
-			self.exportJSON(self.recipes, overwrite)
-		else:
-			print("Nothing To Export")
+		return self.recipes
 
 
 
 
 
 
-	def exportJSON(self, recipes, overwrite):
+	def exportJSON(self, recipes, outputdir, overwrite=True):
 		"""
 		A method to export the list of recipes to a json file called the homepage
 		Parameters:
 			- recipes: A list of recipe objects to export
 			- overwrite: A boolean to describe if an existing file can be overwritten or just appended to
 		"""
-		if (overwrite):
-			param = 'w+'
-		else:
-			param = 'a+'
+		if (len(self.recipes) > 0):
+			if (overwrite):
+				param = 'w+'
+			else:
+				param = 'a+'
 
-		recipes = [r.exportJson() for r in recipes]
-		filename = self.homepage.split("//")[1]
-		file = open(filename + '.json', param)
-		file.write(json.dumps(recipes))
+			recipes = [r.exportJson() for r in recipes]
+			filename = self.homepage.split("//")[1]
+			file = open(outputdir + filename + '.json', param)
+			file.write(json.dumps(recipes))
+		else:
+			print("Nothing To Export")
+
+
 
 
 
@@ -204,7 +225,6 @@ class Website:
 
 
 				#If no elements are found end this loop and retry with the next possible location
-				print(len(element))
 				if (len(element) > 0):
 					element = element[0]
 				else:

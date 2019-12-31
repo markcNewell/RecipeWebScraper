@@ -1,28 +1,43 @@
 from website import Website
+import json
 
+
+
+class Runner:
+	def __init__(self, websitefile, outputdir):
+		self.websites = self.openWebsiteFiles(websitefile)
+		self.outputdir = outputdir
+
+
+
+
+	def openWebsiteFiles(self, websitefile):
+
+		with open(websitefile) as json_file:
+		    data = json.load(json_file)
+
+		return [self.serializeWebsite(website) for website in data]
+
+
+
+
+	def serializeWebsite(self, website):
+		return Website(website['homepage'], website['input_dict'], website['lastmod'])
+
+
+
+
+	def run(self):
+		#For each website get recipes
+		for website in self.websites:
+			recipes = website.getRecipes()
+			website.exportJSON(recipes, self.outputdir)
 
 
 
 
 if __name__ == '__main__':
-	#The data that will be stored in the database on how to retrieve the data from the webpage.
-	#For http://www.mobkitchen.co.uk
+	r = Runner("website.json", "./data/")
+	r.run()
 
-	#Each part of the dictionary e.g. "title" has a list of places to search for the element incase the pages are not uniform
-
-	#if contains then checks if text cotains that string.
-	#otherwise if other attribute check if element has the attribute and value associated with it.
-	mob_input_dict = {
-		"title": [{"element": "h1", "class": "Blog-title Blog-title--item"}],
-		"cooking_time": [{"element": "h3", "contains": "Cooking Time"},{"element": "h2", "contains": "Cooking Time"}],
-		"feeds": [{"element": "h3", "contains": "Feeds"}],
-		"ingredients": [{"element": "ul", "data-rte-list": "default"}],
-		"method": [{"element": "ol", "data-rte-list": "default"}],
-		"image": [{"element": "img", "contains": "static1.squarespace.com"}]
-	}
-
-
-
-	mob = Website("http://www.mobkitchen.co.uk/", mob_input_dict)
-	mob.getRecipes()
 
