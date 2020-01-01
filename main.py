@@ -37,7 +37,7 @@ class Runner:
 
 
 if __name__ == '__main__':
-	r = Runner("website.json", "./data/")
+	r = Runner("websites.json", "./data/")
 	r.run()
 
 

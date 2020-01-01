@@ -26,15 +26,15 @@ mob_input_dict = {
 DONE:
 	- Get Urls Since Access Date
 	- Save New Recipes
+	- Check if recipes already exist in database and modify them if they have changed
+	- Submit Website - HTML
+	- Create Input Dict - JavaScript
+	- Save Website & Input Dict & Access Date - JavaScript
 
 TODO:
 	MAIN:
-		- Submit Website - HTML
-		- Create Input Dict - JavaScript
-		- Save Website & Input Dict & Access Date - Python - (2)
+		- Testing
 
 	EXTRA:
 		- Improve dictionary notation - Python - (10)
-		- Check if recipes already exist in database and modify them if they have changed - Python - (1)
-
 """

@@ -1,11 +1,11 @@
 import re
-from datetime import timedelta, datetime
+import os
+import json
+import requests
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from recipe import RecipeObj
-import copy
-import json
-import requests
+
 
 
 
@@ -22,6 +22,8 @@ class Website:
 
 
 
+
+
 	#Small utility methods
 	def cleanUrl(self, url):
 		return re.sub('\/$', '', url)
@@ -33,6 +35,7 @@ class Website:
 
 	def splitList(self, text):
 		return re.split('\d. ', text)
+
 
 
 
@@ -111,8 +114,6 @@ class Website:
 
 
 
-
-
 	def getRecipes(self):
 		"""
 		A method to get all the recipies of all the urls collected
@@ -126,11 +127,10 @@ class Website:
 		for u in range(1):
 			url = self.urls[u]
 			print(url)
-			#try:
-			self.recipes.append(self.getRecipe(url, self.input_dict))
-			#except:
-				#print(Exception)
-				#exception_counter+=1
+			try:
+				self.recipes.append(self.getRecipe(url, self.input_dict))
+			except:
+				exception_counter+=1
 
 
 		print("Exception Counter:", exception_counter)
@@ -141,7 +141,8 @@ class Website:
 
 
 
-	def exportJSON(self, recipes, outputdir, overwrite=True):
+
+	def exportJSON(self, recipes, outputdir):
 		"""
 		A method to export the list of recipes to a json file called the homepage
 		Parameters:
@@ -149,17 +150,65 @@ class Website:
 			- overwrite: A boolean to describe if an existing file can be overwritten or just appended to
 		"""
 		if (len(self.recipes) > 0):
-			if (overwrite):
-				param = 'w+'
-			else:
-				param = 'a+'
-
-			recipes = [r.exportJson() for r in recipes]
 			filename = self.homepage.split("//")[1]
-			file = open(outputdir + filename + '.json', param)
-			file.write(json.dumps(recipes))
+			filepath = outputdir + filename + '.json'
+
+			old_recipes = self.removeOldVersions(recipes, filepath)
+
+			new_recipes = [r.exportJson() for r in recipes]
+			
+			file = open(filepath, 'w')
+			file.write(json.dumps(old_recipes+new_recipes))
 		else:
 			print("Nothing To Export")
+
+
+
+
+
+
+
+	def removeOldVersions(self, recipes, filepath):
+		"""
+		A method to check through the old recipes to remove duplicates.
+		Parameters:
+			- recipes: an array of Recipe objects to check for.
+			- filepath: the path to the file holding the data.
+		Returns:
+			- a list of recipes from the file and from the website without duplicates
+		"""
+		oldcounter = 0
+
+		if (os.path.exists(filepath)):			
+
+
+			#Open the file
+			with open(filepath, "r+") as file:
+				data = json.load(file)
+
+
+			#For each object in the file check against the new recipe objects
+			for x in range(len(data)):
+				url_data = data[x]['url']
+
+
+				for y in range(len(recipes)):
+					url_recipe = recipes[y].url
+
+
+					#If the same urls then delete the object from the data array
+					if (url_data == url_recipe):
+						del data[x]
+						oldcounter+=1
+
+		else:
+			data = []
+
+
+		print("Updated Counter:", oldcounter)
+		return data
+
+
 
 
 
