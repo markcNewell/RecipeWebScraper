@@ -2,6 +2,7 @@ import re
 import os
 import json
 import requests
+from datetime import datetime
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from recipe import RecipeObj
@@ -11,7 +12,8 @@ from recipe import RecipeObj
 
 
 class Website:
-	def __init__(self, homepage, input_dict, last_mod):
+	def __init__(self, homepage, input_dict, last_mod, sitemap=None):		
+		self.sitemap = sitemap
 		self.homepage = self.cleanUrl(homepage)
 		self.urls = self.getNewUrls(last_mod)
 		self.input_dict = input_dict
@@ -33,8 +35,19 @@ class Website:
 		return " ".join(text.split())
 
 
-	def splitList(self, text):
-		return re.split('\d. ', text)
+	def splitList(self, text, splitter):
+		if (splitter == "line"):
+			sp = "\n"
+		elif (splitter == "number"):
+			sp = "\d. "
+		else:
+			sp = "\n"
+
+		return re.split(sp, text)
+
+
+	def cleanLastMod(self, date):
+		return date[:10]
 
 
 
@@ -51,34 +64,61 @@ class Website:
 		Returns:
 			- The list of urls that have been modified since the last check
 		"""
-		url = self.homepage + "/sitemap.xml"
+		allurls = []
 
-		#Get web page using requests
-		page = requests.get(url)
-		html = page.content
-
-
-		soup = BeautifulSoup(html, 'xml')
-
-
-		#Find all the dates which are after the last modification date
-		times = soup.find_all("lastmod", text=lambda t: self.compareDates(t, last_mod))
-
-
-		#For each time
-		urls = []
-		for u in times:
-			#Find the url associated
-			url = u.parent.findChildren("loc")[0].text
-
-
-			#If the url is a recipe then add it
-			if (re.search("recipes/",url)):
-				urls.append(url)
+		if (self.sitemap == None):
+			sitemapurls = [self.homepage + "/sitemap.xml"]
+		else:
+			sitemapurls = self.sitemap
 
 
 
-		return urls
+		for url in sitemapurls:
+			print(url)
+
+
+			#Get web page using requests
+			page = requests.get(url)
+			html = page.content
+			code = page.status_code
+
+
+			if (code != 200):
+				#Set up web browser and find web page visually
+				driver = webdriver.Firefox()
+				driver.get(url)
+				html = driver.page_source
+				driver.quit()
+
+
+			soup = BeautifulSoup(html, 'xml')
+
+
+			#Find all the dates which are after the last modification date
+			times = soup.find_all("lastmod", text=lambda t: self.compareDates(self.cleanLastMod(t), last_mod))
+
+
+			if (len(times) > 0):
+				#For each time
+				for u in times:
+					#Find the url associated
+					url = u.parent.findChildren("loc")[0].text
+
+
+					#If the url is a recipe then add it
+					if (re.search("recipes/",url)):
+						allurls.append(url)
+
+			else:
+				urls = soup.find_all("loc", text=re.compile("recipes/"))
+
+
+				for u in urls:
+					allurls.append(url)
+
+
+
+		return allurls
 
 
 
@@ -124,9 +164,11 @@ class Website:
 
 
 		#for url in self.urls:
-		for u in range(1):
+		for u in range(1):#len(self.urls)):
 			url = self.urls[u]
 			print(url)
+
+			#Remove try to see exceptions
 			try:
 				self.recipes.append(self.getRecipe(url, self.input_dict))
 			except:
@@ -135,6 +177,18 @@ class Website:
 
 		print("Exception Counter:", exception_counter)
 		return self.recipes
+
+
+
+
+
+
+	def exportWebsite(self):
+		return {
+			"homepage": self.homepage,
+			"input_dict": self.input_dict,
+			"lastmod": datetime.now().strftime("%Y-%m-%d")
+		}
 
 
 
@@ -252,53 +306,62 @@ class Website:
 		for key in input_dict:
 			for place in range(len(input_dict[key])):
 				element_type = input_dict[key][place]["element"]
-				
+
+				if (element_type != "none"):					
 
 
-				#Get the finder (last) part of the object.
-				for part in input_dict[key][place]:
-					finder = part
+					#Get the finder (last) part of the object.
+					p=0
+					for part in input_dict[key][place]:
+						if (p == 1):
+							finder = part
+						p+=1
 
 
 
-				#If the attribute is contains then search the text for it, if not check the attribute equals the value.
-				if (finder == "contains"):
-					#If the object is an image it won't have any text so searches the source of the image.
-					if (element_type == "img"):
-						element = soup.find_all(element_type, src=re.compile(input_dict[key][place][finder],re.I))
+					#If the attribute is contains then search the text for it, if not check the attribute equals the value.
+					if (finder == "contains"):
+						#If the object is an image it won't have any text so searches the source of the image.
+						if (element_type == "img"):
+							element = soup.find_all(element_type, src=re.compile(input_dict[key][place][finder],re.I))
+						else:
+							element = soup.find_all(element_type, text=re.compile(input_dict[key][place][finder],re.I))
 					else:
-						element = soup.find_all(element_type, text=re.compile(input_dict[key][place][finder],re.I))
-				else:
-					element = soup.find_all(element_type, attrs={finder:input_dict[key][place][finder]})
+						element = soup.find_all(element_type, attrs={finder:input_dict[key][place][finder]})
 
 
 
-				#If no elements are found end this loop and retry with the next possible location
-				if (len(element) > 0):
-					element = element[0]
-				else:
-					if (place == (len(input_dict[key])-1)):
-						raise Exception("Error retrieving " + key + " for " + url)
+					#If no elements are found end this loop and retry with the next possible location
+					if (len(element) > 0):
+						element = element[0]
 					else:
-						continue;
+						if (place == (len(input_dict[key])-1)):
+							raise Exception("Error retrieving " + key + " for " + url)
+						else:
+							continue;
 
 
 
-				#If the key is ingredients or method (which should both be lists), convert them to lists.
-				if (key == "ingredients") | (key == "method"):
-					if (element_type == "ul") | (element_type == "ol"):
-						text = [self.clearText(item.text) for item in element.find_all("li")]
+					#If the key is ingredients or method (which should both be lists), convert them to lists.
+					if (key == "ingredients") | (key == "method"):
+						if (element_type == "ul") | (element_type == "ol") | (input_dict[key][place]["splitter"] == "list"):
+							text = [self.clearText(item.text) for item in element.find_all("li")]
+						else:
+							text = self.splitList(element.text, input_dict[key][place]["splitter"])
+					elif (key == "feeds") | (key == "cooking_time"):
+						text = [int(s) for s in element.text.split() if s.isdigit()][0]
+					elif (key == "image"):
+						text = element['src']
 					else:
-						text = self.splitList(self.clearText(element.text))
-				elif (key == "feeds") | (key == "cooking_time"):
-					text = [int(s) for s in element.text.split() if s.isdigit()][0]
-				elif (key == "image"):
-					text = element['src']
+						text = self.clearText(element.text)
+
+
 				else:
-					text = self.clearText(element.text)
+					text = "N/A"
+
+
 
 				data.append(text)
-
 
 
 				#Break so if text is found and added no more is searched for in that place.

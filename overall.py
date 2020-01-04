@@ -34,6 +34,9 @@ DONE:
 TODO:
 	MAIN:
 		- Testing
+		- Submit Website Design
+
+		- Make Django Rest API
 
 	EXTRA:
 		- Improve dictionary notation - Python - (10)
